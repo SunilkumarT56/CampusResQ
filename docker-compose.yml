@@ -1,0 +1,59 @@
+services:
+  web:
+    build: { context: ., dockerfile: apps/web/Dockerfile }
+    ports: ["8080:80"]
+    depends_on: { api: { condition: service_healthy } }
+    restart: unless-stopped
+  api:
+    build: { context: ., dockerfile: Dockerfile }
+    ports: ["3001:3001"]
+    environment:
+      API_PORT: 3001
+      HOST_TIMEOUT_MS: 1500
+      HOST_1_URL: http://host-1:8000
+      HOST_2_URL: http://host-2:8000
+      HOST_3_URL: http://host-3:8000
+      HOST_4_URL: http://host-4:8000
+      HOST_5_URL: http://host-5:8000
+      ORCHESTRATOR_URL: http://orchestrator:5000
+    depends_on:
+      orchestrator: { condition: service_healthy }
+      router-1: { condition: service_healthy }
+      host-1: { condition: service_healthy }
+      host-2: { condition: service_healthy }
+      host-3: { condition: service_healthy }
+      host-4: { condition: service_healthy }
+      host-5: { condition: service_healthy }
+    restart: unless-stopped
+  orchestrator:
+    build: { context: ./services/orchestrator }
+    environment:
+      PORT: 5000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    expose: ["5000"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:5000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+  router-1:
+    build: { context: ./services/router }
+    environment: { ROUTER_ID: router-1 }
+    expose: ["8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+  host-1: &host-agent
+    build: { context: ./services/host-agent }
+    environment: { HOST_ID: host-1, HOST_NAME: Emergency Service, PRIORITY: URGENT }
+    expose: ["8000"]
+    restart: unless-stopped
+  host-2: { <<: *host-agent, environment: { HOST_ID: host-2, HOST_NAME: Authentication Service, PRIORITY: URGENT } }
+  host-3: { <<: *host-agent, environment: { HOST_ID: host-3, HOST_NAME: Academic Platform, PRIORITY: MEDIUM } }
+  host-4: { <<: *host-agent, environment: { HOST_ID: host-4, HOST_NAME: File Transfer, PRIORITY: LOW } }
+  host-5: { <<: *host-agent, environment: { HOST_ID: host-5, HOST_NAME: Background Processing, PRIORITY: LOW } }
